@@ -3,10 +3,77 @@ var cors = require('cors')
 const app = express()
 const bodyParser = require('body-parser')
 const Course = require('./models/courses')
+const jwt = require('jwt-simple')
+const User = require('./models/users')
+const secret = "supersecret"
 app.use(cors())
 app.use(bodyParser.json())
 const router = express.Router()
 app.use(express.json())
+
+router.post("/user", async(req, res) => {
+    if(!req.body.username || !req.body.password){
+        res.status(400).json({ error: "Missing username or password" });
+    }
+
+    const newUser = await new User({
+        username: req.body.username,
+        password: req.body.password,
+        status: req.body.status
+    })
+    try{
+        await newUser.save()
+        res.sendStatus(201)
+    }
+    catch(err){
+        res.status(400).send(err)
+    }
+
+})
+
+router.post("/auth", async (req, res) => {
+    if (!req.body.username || !req.body.password) {
+        return res.status(400).json({ error: "Missing username or password" });
+    }
+
+    try {
+        let user = await User.findOne({ username: req.body.username });
+
+        if (!user) {
+            console.log("User not found in database:", req.body.username);
+            return res.status(401).json({ error: "Username or password are incorrect" });
+        }
+
+        console.log("User found:", user);
+
+        if (user.password !== req.body.password) {
+            console.log("Password mismatch for user:", req.body.username);
+            return res.status(401).json({ error: "Username or password are incorrect" });
+        }
+
+        const token = jwt.encode({ username: user.username }, secret);
+        res.json({ username: user.username, token: token, auth: 1 });
+    } catch (err) {
+        res.status(500).json({ error: "Database error", details: err.message });
+    }
+});
+
+
+    router.get("/status", async(req, res) => {
+        if(!req.headers["x-auth"]){
+            return res.status(401).json({error: "Missing X-Auth"})
+        }
+        const token = req.headers["x-auth"]
+        try{
+            const decoded = jwt.decode(token,secret)
+            const users = await User.find({}, "username status")
+            res.json(users)
+        }
+        catch(ex){
+            res.status(401).json({error: "invalid jwt"})
+        }
+    
+    })
 
 router.get("/courses", async(req, res) => {
     try{
